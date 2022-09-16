@@ -1,27 +1,19 @@
 SET(RTDD_TARGET scrtdd)
 
 SET(RTDD_SOURCES
-		hdd/utils.cpp
-		hdd/lsmr.cpp
-		hdd/lsqr.cpp
-		hdd/solver.cpp
-		hdd/csvreader.cpp
-		hdd/datasrc.cpp
-		hdd/catalog.cpp
-		hdd/wfmngr.cpp
-		hdd/clustering.cpp
-		hdd/hypodd.cpp
-		app.cpp
-		rtdd.cpp
+		msg.cpp
+		rtddtool.cpp
 		main.cpp
 )
 
-INCLUDE_DIRECTORIES(hdd)
-INCLUDE_DIRECTORIES(${RTDDMSG_DIR}) 
+INCLUDE_DIRECTORIES(${HDD_DIR})
+
+ADD_DEFINITIONS( -DRTDD_VERSION="${VERSION_STR}" )
 
 SC_ADD_EXECUTABLE(RTDD ${RTDD_TARGET})
-SC_LINK_LIBRARIES_INTERNAL(${RTDD_TARGET} client rtddmsg)
-SC_INSTALL_INIT(${RTDD_TARGET} ../../../trunk/apps/templates/initd.py)
+TARGET_LINK_LIBRARIES(${RTDD_TARGET} hdd)
+SC_LINK_LIBRARIES_INTERNAL(${RTDD_TARGET} hddsc client)
+SC_INSTALL_INIT(${RTDD_TARGET} ${CMAKE_CURRENT_SOURCE_DIR}/../../../../base/common/apps/templates/initd.py)
 
 FILE(GLOB descs "${CMAKE_CURRENT_SOURCE_DIR}/descriptions/*.xml")
 INSTALL(FILES ${descs} DESTINATION ${SC3_PACKAGE_APP_DESC_DIR})
