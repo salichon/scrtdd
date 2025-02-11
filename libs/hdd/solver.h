@@ -1,15 +1,26 @@
 /***************************************************************************
- *   Copyright (C) by ETHZ/SED                                             *
+ * MIT License                                                             *
  *                                                                         *
- * This program is free software: you can redistribute it and/or modify    *
- * it under the terms of the GNU LESSER GENERAL PUBLIC LICENSE as          *
- * published by the Free Software Foundation, either version 3 of the      *
- * License, or (at your option) any later version.                         *
+ * Copyright (C) by ETHZ/SED                                               *
  *                                                                         *
- * This software is distributed in the hope that it will be useful,        *
- * but WITHOUT ANY WARRANTY; without even the implied warranty of          *
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the           *
- * GNU Affero General Public License for more details.                     *
+ * Permission is hereby granted, free of charge, to any person obtaining a *
+ * copy of this software and associated documentation files (the           *
+ * “Software”), to deal in the Software without restriction, including     *
+ * without limitation the rights to use, copy, modify, merge, publish,     *
+ * distribute, sublicense, and/or sell copies of the Software, and to      *
+ * permit persons to whom the Software is furnished to do so, subject to   *
+ * the following conditions:                                               *
+ *                                                                         *
+ * The above copyright notice and this permission notice shall be          *
+ * included in all copies or substantial portions of the Software.         *
+ *                                                                         *
+ * THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND,         *
+ * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF      *
+ * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  *
+ * IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY    *
+ * CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,    *
+ * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE       *
+ * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                  *
  *                                                                         *
  *   Developed by Luca Scarabello <luca.scarabello@sed.ethz.ch>            *
  ***************************************************************************/
@@ -35,7 +46,8 @@ namespace HDD {
  *      W G m = d W;
  *
  * Where G contains the partial derivatives of the travel times with respect to
- * event location and origin times.
+ * event/station location and 1 in the column  corresponding to the origin
+ * time correction term
  * m is a vector containing the changes in hypocentral parameters we wish to
  * determine for each event (delta x, delta y, delta z and delta travel time)
  * d is the data vector containing the double-differences
@@ -108,7 +120,7 @@ struct DDSystem
     delete[] W;
   }
 
-  DDSystem(const DDSystem &other) = delete;
+  DDSystem(const DDSystem &other)           = delete;
   DDSystem operator=(const DDSystem &other) = delete;
 };
 
@@ -124,7 +136,7 @@ public:
   Solver(std::string type) : _type(type) {}
   ~Solver() = default;
 
-  Solver(const Solver &other) = delete;
+  Solver(const Solver &other)           = delete;
   Solver operator=(const Solver &other) = delete;
 
   void addObservation(unsigned evId1,
@@ -215,14 +227,12 @@ private:
   struct EventParams
   {
     double lat, lon, depth;
-    double x, y, z; // km
   };
   std::unordered_map<unsigned, EventParams> _eventParams; // key = evIdx
 
   struct StationParams
   {
     double lat, lon, elevation;
-    double x, y, z; // km
   };
   std::unordered_map<unsigned, StationParams> _stationParams; // key = phStaIdx
 
@@ -256,17 +266,12 @@ private:
   std::unordered_map<unsigned, std::unordered_map<unsigned, ParamStats>>
       _paramStats;
 
-  struct
-  {
-    double lat, lon, depth;
-  } _centroid;
-
   struct EventDeltas
   {
-    double time;      // sec
-    double depth;     // km
-    double latitude;  // km
-    double longitude; // km
+    double time;  // sec
+    double depth; // km
+    double kmLat; // km
+    double kmLon; // km
   };
   std::unordered_map<unsigned, EventDeltas> _eventDeltas; // key = evIdx
 

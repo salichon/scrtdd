@@ -1,15 +1,26 @@
 /***************************************************************************
- *   Copyright (C) by ETHZ/SED                                             *
+ * MIT License                                                             *
  *                                                                         *
- * This program is free software: you can redistribute it and/or modify    *
- * it under the terms of the GNU LESSER GENERAL PUBLIC LICENSE as          *
- * published by the Free Software Foundation, either version 3 of the      *
- * License, or (at your option) any later version.                         *
+ * Copyright (C) by ETHZ/SED                                               *
  *                                                                         *
- * This software is distributed in the hope that it will be useful,        *
- * but WITHOUT ANY WARRANTY; without even the implied warranty of          *
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the           *
- * GNU Affero General Public License for more details.                     *
+ * Permission is hereby granted, free of charge, to any person obtaining a *
+ * copy of this software and associated documentation files (the           *
+ * “Software”), to deal in the Software without restriction, including     *
+ * without limitation the rights to use, copy, modify, merge, publish,     *
+ * distribute, sublicense, and/or sell copies of the Software, and to      *
+ * permit persons to whom the Software is furnished to do so, subject to   *
+ * the following conditions:                                               *
+ *                                                                         *
+ * The above copyright notice and this permission notice shall be          *
+ * included in all copies or substantial portions of the Software.         *
+ *                                                                         *
+ * THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND,         *
+ * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF      *
+ * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  *
+ * IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY    *
+ * CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,    *
+ * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE       *
+ * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                  *
  *                                                                         *
  *   Developed by Luca Scarabello <luca.scarabello@sed.ethz.ch>            *
  ***************************************************************************/
@@ -80,8 +91,8 @@ namespace HDD {
 
 DD::DD(const Catalog &catalog,
        const Config &cfg,
-       std::unique_ptr<HDD::TravelTimeTable> ttt,
-       std::unique_ptr<HDD::Waveform::Proxy> wf)
+       const std::shared_ptr<HDD::TravelTimeTable> &ttt,
+       const std::shared_ptr<HDD::Waveform::Proxy> &wf)
     : _cfg(cfg), _srcCat(catalog),
       _bgCat(Catalog::filterPhasesAndSetWeights(_srcCat,
                                                 Phase::Source::CATALOG,
@@ -275,7 +286,7 @@ void DD::preloadWaveforms()
       };
 
   unsigned numPhases = 0, numSPhases = 0, numEvents = 0;
-  WfCounters wfcount{0};
+  WfCounters wfcount{};
 
   for (const auto &kv : _bgCat.getEvents())
   {
@@ -812,7 +823,7 @@ unique_ptr<Catalog> DD::relocate(
         interpolate(solverOpt.downWeightingByResidualStart,
                     solverOpt.downWeightingByResidualEnd);
     double absLocConstraint   = interpolate(solverOpt.absLocConstraintStart,
-                                          solverOpt.absLocConstraintEnd);
+                                            solverOpt.absLocConstraintEnd);
     double absTTDiffObsWeight = interpolate(1.0, solverOpt.absTTDiffObsWeight);
     double xcorrObsWeight     = interpolate(1.0, solverOpt.xcorrObsWeight);
 
@@ -1020,13 +1031,13 @@ bool DD::ObservationParams::add(HDD::TravelTimeTable &ttt,
   {
     try
     {
-      double travelTime, takeOfAngleAzim, takeOfAngleDip, velocityAtSrc;
-      ttt.compute(event, station, string(1, phaseType), travelTime,
-                  takeOfAngleAzim, takeOfAngleDip, velocityAtSrc);
+      double travelTime, azimuth, takeOffAngle, velocityAtSrc;
+      ttt.compute(event, station, string(1, phaseType), travelTime, azimuth,
+                  takeOffAngle, velocityAtSrc);
       double ttResidual = travelTime - durToSec(phase.time - event.time);
-      _entries[key]     = Entry{event,          station,       phaseType,
-                            travelTime,     ttResidual,    takeOfAngleAzim,
-                            takeOfAngleDip, velocityAtSrc, computeEvChanges};
+      _entries[key]     = Entry{event,        station,       phaseType,
+                            travelTime,   ttResidual,    azimuth,
+                            takeOffAngle, velocityAtSrc, computeEvChanges};
     }
     catch (exception &e)
     {
@@ -1117,15 +1128,17 @@ unique_ptr<Catalog> DD::updateRelocatedEvents(
       }
     }
 
-    // compute distance and azimuth of the event to the new location
-    double distance = std::sqrt(square(deltaLon) + square(deltaLat)); // km
-    double azimuth  = radToDeg(std::atan2(deltaLon, deltaLat));
+    //
+    // converte delta lat lon [ km -> degree ]
+    //
+    double distance = std::sqrt(square(deltaLat) + square(deltaLon));
+    double azimuth  = std::atan2(deltaLon, deltaLat);
 
-    // Computes the coordinates (lat, lon) of the point which is at a degree
-    // azimuth and km distance as seen from the original event location
+    // Computes the coordinates (lat, lon) of the point which is at
+    // azimuth [rad] and distance [km] as seen from the original event location
     double newLat, newLon;
     computeCoordinates(distance, azimuth, event.latitude, event.longitude,
-                       newLat, newLon);
+                       newLat, newLon, event.depth);
 
     unique_ptr<Neighbours> finalNeighbours(new Neighbours());
     finalNeighbours->refEvId = event.id;
@@ -1142,7 +1155,7 @@ unique_ptr<Catalog> DD::updateRelocatedEvents(
     event.relocInfo.finalRms      = 0;
     event.relocInfo.isRelocated   = true;
     event.relocInfo.numNeighbours = 0;
-    event.relocInfo.phases        = {0};
+    event.relocInfo.phases        = {};
     event.relocInfo.dd.numTTp     = 0;
     event.relocInfo.dd.numTTs     = 0;
     event.relocInfo.dd.numCCp     = 0;
@@ -1297,10 +1310,9 @@ unique_ptr<Catalog> DD::updateRelocatedEventsFinalStats(
       const Station &station = tmpCat->getStations().at(finalPhase.stationId);
       try
       {
-        double travelTime;
-        _ttt->compute(startEvent, station,
-                      string(1, static_cast<char>(finalPhase.procInfo.type)),
-                      travelTime);
+        double travelTime = _ttt->compute(
+            startEvent, station,
+            string(1, static_cast<char>(finalPhase.procInfo.type)));
         double residual =
             travelTime - durToSec(finalPhase.time - startEvent.time);
         finalPhase.relocInfo.startTTResidual = residual;
@@ -1610,7 +1622,7 @@ XCorrCache DD::buildXCorrCache(
     }
   }
 
-  WfCounters wfcount{0};
+  WfCounters wfcount{};
   wfcount.update(_wfAccess.loader.get());
   wfcount.update(_wfAccess.diskCache.get());
 
@@ -1864,7 +1876,7 @@ DD::preloadNonCatalogWaveforms(Catalog &catalog,
   batchLoader->load();
 
   // print counters
-  WfCounters wfcount{0};
+  WfCounters wfcount{};
   wfcount.update(batchLoader.get());
   wfcount.update(diskLoader.get());
   logInfo("Event %s: waveforms downloaded %u, not available %u, loaded from "
@@ -2304,7 +2316,7 @@ void DD::logXCorrSummary(const XCorrCache &xcorr)
     unsigned good_cc;
     unsigned good_cc_s;
     unsigned good_cc_p;
-  } counters{0};
+  } counters{};
 
   auto callback = [&counters, this](unsigned ev1, unsigned ev2,
                                     const std::string &stationId,
@@ -2583,7 +2595,7 @@ void DD::evalXCorr(const ClusteringOptions &clustOpt,
      pStatsByStaDistance, sStatsByStaDistance, pStatsByInterEvDistance,
      sStatsByInterEvDistance, interEvDistStep, staDistStep, 1.0);
 
-  WfCounters wfcount{0};
+  WfCounters wfcount{};
   wfcount.update(_wfAccess.loader.get());
   wfcount.update(_wfAccess.diskCache.get());
   logInfo("Catalog waveforms downloaded %u, not available "

@@ -1,15 +1,26 @@
 /***************************************************************************
- *   Copyright (C) by ETHZ/SED                                             *
+ * MIT License                                                             *
  *                                                                         *
- * This program is free software: you can redistribute it and/or modify    *
- * it under the terms of the GNU LESSER GENERAL PUBLIC LICENSE as          *
- * published by the Free Software Foundation, either version 3 of the      *
- * License, or (at your option) any later version.                         *
+ * Copyright (C) by ETHZ/SED                                               *
  *                                                                         *
- * This software is distributed in the hope that it will be useful,        *
- * but WITHOUT ANY WARRANTY; without even the implied warranty of          *
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the           *
- * GNU Affero General Public License for more details.                     *
+ * Permission is hereby granted, free of charge, to any person obtaining a *
+ * copy of this software and associated documentation files (the           *
+ * “Software”), to deal in the Software without restriction, including     *
+ * without limitation the rights to use, copy, modify, merge, publish,     *
+ * distribute, sublicense, and/or sell copies of the Software, and to      *
+ * permit persons to whom the Software is furnished to do so, subject to   *
+ * the following conditions:                                               *
+ *                                                                         *
+ * The above copyright notice and this permission notice shall be          *
+ * included in all copies or substantial portions of the Software.         *
+ *                                                                         *
+ * THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND,         *
+ * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF      *
+ * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  *
+ * IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY    *
+ * CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,    *
+ * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE       *
+ * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                  *
  *                                                                         *
  *   Developed by Luca Scarabello <luca.scarabello@sed.ethz.ch>            *
  ***************************************************************************/
@@ -74,9 +85,8 @@ unique_ptr<Neighbours> selectNeighbouringEvents(const Catalog &catalog,
                                                 double maxEllipsoidSize,
                                                 bool keepUnmatched)
 {
-  logDebug(
-      "Selecting Neighbouring Events for event %s lat %.6f lon %.6f depth %.4f",
-      string(refEv).c_str(), refEv.latitude, refEv.longitude, refEv.depth);
+  logDebug("Selecting Neighbouring Events for event %s lat %g lon %g depth %g",
+           string(refEv).c_str(), refEv.latitude, refEv.longitude, refEv.depth);
 
   // Optimization: make code faster but the result will be the same.
   if (maxNumNeigh <= 0)
@@ -111,7 +121,6 @@ unique_ptr<Neighbours> selectNeighbouringEvents(const Catalog &catalog,
   //
   multimap<double, unsigned> eventByDistance;      // distance, eventid
   unordered_map<unsigned, double> distanceByEvent; // eventid, distance
-  unordered_map<unsigned, double> azimuthByEvent;  // eventid, azimuth
 
   for (const auto &kv : catalog.getEvents())
   {
@@ -126,13 +135,11 @@ unique_ptr<Neighbours> selectNeighbouringEvents(const Catalog &catalog,
       continue;
 
     // compute distance between current event and reference origin
-    double azimuth;
-    double distance = computeDistance(refEv, event, &azimuth);
+    double distance = computeDistance(refEv, event);
 
     // keep a list of events in range sorted by distance
     eventByDistance.emplace(distance, event.id);
     distanceByEvent.emplace(event.id, distance);
-    azimuthByEvent.emplace(event.id, azimuth);
   }
 
   //
@@ -217,7 +224,7 @@ unique_ptr<Neighbours> selectNeighbouringEvents(const Catalog &catalog,
       // now find corresponding phase in reference event phases
       bool peer_found = false;
       auto itRef      = refEvCatalog.searchPhase(refEv.id, phase.stationId,
-                                            phase.procInfo.type);
+                                                 phase.procInfo.type);
       if (itRef != refEvCatalog.getPhases().end())
       {
         const Phase &refPhase = itRef->second;
@@ -306,11 +313,9 @@ unique_ptr<Neighbours> selectNeighbouringEvents(const Catalog &catalog,
       neighbours->ids.insert(ev.id);
       neighbours->phases.emplace(ev.id, evSelEntry.phases);
 
-      logDebug("Neighbour: #phases %2d distance %5.2f azimuth %3.f "
-               "depth-diff %6.3f event %s",
+      logDebug("Neighbour: #phases %2d distance %g depth-diff %g event %s",
                dtCountByEvent[ev.id], distanceByEvent[ev.id],
-               azimuthByEvent[ev.id], refEv.depth - ev.depth,
-               string(ev).c_str());
+               refEv.depth - ev.depth, string(ev).c_str());
     }
   }
   else
@@ -352,10 +357,10 @@ unique_ptr<Neighbours> selectNeighbouringEvents(const Catalog &catalog,
               neighbours->phases.emplace(ev.id, evSelEntry.phases);
 
               logDebug("Neighbour: ellipsoid %2d quadrant %d #phases %2d "
-                       "distance %5.2f azimuth %3.f depth-diff %6.3f event %s",
+                       "distance %5.2f depth-diff %6.3f event %s",
                        elpsNum, quadrant, dtCountByEvent[ev.id],
-                       distanceByEvent[ev.id], azimuthByEvent[ev.id],
-                       refEv.depth - ev.depth, string(ev).c_str());
+                       distanceByEvent[ev.id], refEv.depth - ev.depth,
+                       string(ev).c_str());
 
               selectedEvents.erase(it);
               break;
@@ -393,85 +398,110 @@ selectNeighbouringEventsCatalog(const Catalog &catalog,
                                 double maxEllipsoidSize,
                                 bool keepUnmatched)
 {
-  logInfo("Selecting Catalog Neighbouring Events ");
+  logInfo("Selecting Catalog Neighbouring Events");
 
-  // neighbours for each event
+  // output: neighbours for each event in the catalog
   unordered_map<unsigned, unique_ptr<Neighbours>> neighboursList;
 
-  // for each event find the neighbours
+  // validCatalog contains events not discarded by user criteria
   Catalog validCatalog(catalog);
-  list<unsigned> todoEvents;
-  for (const auto &kv : validCatalog.getEvents())
-    todoEvents.push_back(kv.first);
 
-  while (!todoEvents.empty())
+  // events discarded by user criteria
+  unordered_set<unsigned> removedEvents;
+
+  // for each event find its neighbours
+  for (const auto &kv : catalog.getEvents())
   {
-    unordered_set<unsigned> removedEvents;
+    const Catalog::Event& event = kv.second;
 
-    // for each event find its neighbours
-    for (auto it = todoEvents.begin(); it != todoEvents.end();)
+    unique_ptr<Neighbours> neighbours;
+    try
     {
-      Catalog::Event event = validCatalog.getEvents().find(*it)->second;
-      it                   = todoEvents.erase(it);
+      neighbours = selectNeighbouringEvents(
+          validCatalog, event, validCatalog, minPhaseWeight, minESdist,
+          maxESdist, minEStoIEratio, minDTperEvt, maxDTperEvt, minNumNeigh,
+          maxNumNeigh, numEllipsoids, maxEllipsoidSize, keepUnmatched);
+    }
+    catch (...)
+    {}
 
-      unique_ptr<Neighbours> neighbours;
-      try
-      {
-        neighbours = selectNeighbouringEvents(
-            validCatalog, event, validCatalog, minPhaseWeight, minESdist,
-            maxESdist, minEStoIEratio, minDTperEvt, maxDTperEvt, minNumNeigh,
-            maxNumNeigh, numEllipsoids, maxEllipsoidSize, keepUnmatched);
-      }
-      catch (...)
-      {}
-
-      if (!neighbours)
-      {
-        // event discarded because it doesn't satisfy requirements
-        removedEvents.insert(event.id);
-        // we don't want other events to pick this as neighbour
-        validCatalog.removeEvent(event.id);
-        continue;
-      }
-      // add newly computed neighbors catalogs to previous ones
-      neighboursList.emplace(neighbours->refEvId, std::move(neighbours));
+    if (!neighbours)
+    {
+      // event discarded because it doesn't satisfy requirements
+      removedEvents.insert(event.id);
+      // we don't want other events to pick this as neighbour
+      validCatalog.removeEvent(event.id);
+      continue;
     }
 
-    // check if the removed events were used as neighbour of any other event;
-    // if so rebuild neighbours for those events
-    bool redo;
-    do
+    neighboursList.emplace(neighbours->refEvId, std::move(neighbours));
+  }
+
+  // if the removed events were used as neighbours of any other valid event
+  // then try to rebuild their neighbours
+  bool redo;
+  do
+  {
+    logDebug("Found neighbours for %zu events (%zu events don't satisfy the constraints)",
+            neighboursList.size(), removedEvents.size());
+
+    logDebug("Fix events whose neighbours are the events not satisfying the constraints");
+
+    redo = false;
+    unordered_map<unsigned, unique_ptr<Neighbours>> validNeighbours;
+
+    for (auto &kv : neighboursList)
     {
-      redo = false;
-      unordered_map<unsigned, unique_ptr<Neighbours>> validNeighbours;
+      unique_ptr<Neighbours> &neighbours = kv.second;
+      bool invalid                       = false;
 
-      for (auto &kv : neighboursList)
+      // check if the neighbours are in the removed event list
+      for (unsigned nbId : neighbours->ids)
       {
-        unique_ptr<Neighbours> &neighbours = kv.second;
-        bool invalid                       = false;
-        for (unsigned nbId : neighbours->ids)
+        if (removedEvents.count(nbId) != 0)
         {
-          if (removedEvents.count(nbId) != 0)
-          {
-            invalid = true;
-            break;
-          }
+          invalid = true;
+          break;
         }
-
-        if (invalid)
-        {
-          removedEvents.insert(neighbours->refEvId);
-          todoEvents.push_back(neighbours->refEvId);
-          redo = true;
-          continue;
-        }
-        validNeighbours.emplace(neighbours->refEvId, std::move(neighbours));
       }
 
-      neighboursList = std::move(validNeighbours);
+      // if the current event uses at least a removed event, then rebuild
+      // its neighbours
+      if (invalid)
+      {
+        const Catalog::Event& event = validCatalog.getEvents().find(neighbours->refEvId)->second;
 
-    } while (redo);
-  }
+        try
+        {
+          neighbours = selectNeighbouringEvents(
+              validCatalog, event, validCatalog, minPhaseWeight, minESdist,
+              maxESdist, minEStoIEratio, minDTperEvt, maxDTperEvt, minNumNeigh,
+              maxNumNeigh, numEllipsoids, maxEllipsoidSize, keepUnmatched);
+        }
+        catch (...)
+        {}
+
+        if (neighbours)
+        {
+          invalid = false;
+        }
+      }
+
+      // failed to rebuild its neighbours: remove this event too
+      if (invalid)
+      {
+        removedEvents.insert(neighbours->refEvId);
+        validCatalog.removeEvent(neighbours->refEvId);
+        redo = true;
+        continue;
+      }
+
+      validNeighbours.emplace(neighbours->refEvId, std::move(neighbours));
+    }
+
+    neighboursList = std::move(validNeighbours);
+
+  } while (redo);
 
   return neighboursList;
 }

@@ -1,15 +1,26 @@
 /***************************************************************************
- *   Copyright (C) by ETHZ/SED                                             *
+ * MIT License                                                             *
  *                                                                         *
- * This program is free software: you can redistribute it and/or modify    *
- * it under the terms of the GNU LESSER GENERAL PUBLIC LICENSE as          *
- * published by the Free Software Foundation, either version 3 of the      *
- * License, or (at your option) any later version.                         *
+ * Copyright (C) by ETHZ/SED                                               *
  *                                                                         *
- * This software is distributed in the hope that it will be useful,        *
- * but WITHOUT ANY WARRANTY; without even the implied warranty of          *
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the           *
- * GNU Affero General Public License for more details.                     *
+ * Permission is hereby granted, free of charge, to any person obtaining a *
+ * copy of this software and associated documentation files (the           *
+ * “Software”), to deal in the Software without restriction, including     *
+ * without limitation the rights to use, copy, modify, merge, publish,     *
+ * distribute, sublicense, and/or sell copies of the Software, and to      *
+ * permit persons to whom the Software is furnished to do so, subject to   *
+ * the following conditions:                                               *
+ *                                                                         *
+ * The above copyright notice and this permission notice shall be          *
+ * included in all copies or substantial portions of the Software.         *
+ *                                                                         *
+ * THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND,         *
+ * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF      *
+ * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  *
+ * IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY    *
+ * CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,    *
+ * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE       *
+ * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                  *
  *                                                                         *
  *   Developed by Luca Scarabello <luca.scarabello@sed.ethz.ch>            *
  ***************************************************************************/
@@ -243,12 +254,11 @@ void Solver::addObservationParams(unsigned evId,
                                   double takeOffAngleDip,
                                   double velocityAtSrc)
 {
-  string phStaId      = string(1, phase) + "@" + staId;
-  int evIdx           = _eventIdConverter.convert(evId);
-  unsigned phStaIdx   = _phStaIdConverter.convert(phStaId);
-  _eventParams[evIdx] = EventParams{evLat, evLon, evDepth, 0, 0, 0};
-  _stationParams[phStaIdx] =
-      StationParams{staLat, staLon, staElevation, 0, 0, 0};
+  string phStaId              = string(1, phase) + "@" + staId;
+  int evIdx                   = _eventIdConverter.convert(evId);
+  unsigned phStaIdx           = _phStaIdConverter.convert(phStaId);
+  _eventParams[evIdx]         = EventParams{evLat, evLon, evDepth};
+  _stationParams[phStaIdx]    = StationParams{staLat, staLon, staElevation};
   _obsParams[evIdx][phStaIdx] = ObservationParams{computeEvChanges,
                                                   travelTime,
                                                   travelTimeResidual,
@@ -272,8 +282,8 @@ bool Solver::getEventChanges(unsigned evId,
   if (_eventDeltas.find(evIdx) == _eventDeltas.end()) return false;
 
   const EventDeltas &evDelta = _eventDeltas.at(evIdx);
-  deltaLat                   = evDelta.latitude;
-  deltaLon                   = evDelta.longitude;
+  deltaLat                   = evDelta.kmLat;
+  deltaLon                   = evDelta.kmLon;
   deltaDepth                 = evDelta.depth;
   deltaTT                    = evDelta.time;
   return true;
@@ -331,12 +341,12 @@ void Solver::loadSolutions()
                                   EventDeltas &evDelta) -> bool {
     const unsigned evOffset = evIdx * 4;
 
-    evDelta.longitude = _dd->m[evOffset + 0];
-    evDelta.latitude  = _dd->m[evOffset + 1];
-    evDelta.depth     = _dd->m[evOffset + 2];
-    evDelta.time      = _dd->m[evOffset + 3];
+    evDelta.kmLon = _dd->m[evOffset + 0];
+    evDelta.kmLat = _dd->m[evOffset + 1];
+    evDelta.depth = _dd->m[evOffset + 2];
+    evDelta.time  = _dd->m[evOffset + 3];
 
-    if (!std::isfinite(evDelta.longitude) || !std::isfinite(evDelta.latitude) ||
+    if (!std::isfinite(evDelta.kmLon) || !std::isfinite(evDelta.kmLat) ||
         !std::isfinite(evDelta.depth) || !std::isfinite(evDelta.time))
     {
       return false;
@@ -365,7 +375,7 @@ void Solver::loadSolutions()
       }
     }
 
-    if (!allZero) _eventDeltas[evIdx] = {0};
+    if (!allZero) _eventDeltas[evIdx] = {};
   }
 
   //
@@ -377,7 +387,7 @@ void Solver::loadSolutions()
     const unsigned evIds = it->first;
     EventDeltas &evDelta = it->second;
     it                   = computeEventDelta(evIds, evDelta) ? std::next(it)
-                                           : _eventDeltas.erase(it);
+                                                             : _eventDeltas.erase(it);
   }
 
   // free some memory
@@ -388,54 +398,6 @@ void Solver::loadSolutions()
 
 void Solver::computePartialDerivatives()
 {
-  //
-  // Convert all events and station coordinates to an euclidean space in X,Y,Z
-  // cartesian system centered around the cluster centroid, which is an
-  // approximation of the original non-euclidean system (The approximation is
-  // valid if the area covered by all events is small such that the Earth
-  // curvature can be assumed flat.).
-  // Next, compute the partial derivatives of the travel times with respect to
-  // the new system.
-  //
-  _centroid = {0, 0, 0};
-  vector<double> longitudes;
-  for (const auto &kw : _eventParams)
-  {
-    _centroid.lat += kw.second.lat;
-    _centroid.depth += kw.second.depth;
-    longitudes.push_back(degToRad(kw.second.lon));
-  }
-  _centroid.lat /= _eventParams.size();
-  _centroid.depth /= _eventParams.size();
-  _centroid.lon = normalizeLon(radToDeg(computeCircularMean(longitudes)));
-
-  auto convertCoord = [this](double lat, double lon, double depth, double &x,
-                             double &y, double &z) {
-    double distance, az;
-    distance = computeDistance(this->_centroid.lat, this->_centroid.lon, 0, lat,
-                               lon, 0, &az);
-    az       = degToRad(az);
-    x        = distance * std::sin(az);
-    y        = distance * std::cos(az);
-    z        = depth - _centroid.depth;
-  };
-
-  // convert events' coordinates
-  for (auto &kv : _eventParams)
-  {
-    EventParams &evprm = kv.second;
-    convertCoord(evprm.lat, evprm.lon, evprm.depth, evprm.x, evprm.y, evprm.z);
-  }
-
-  // convert stations' coordinates
-  for (auto &kv : _stationParams)
-  {
-    StationParams &staprm = kv.second;
-    convertCoord(staprm.lat, staprm.lon, -staprm.elevation / 1000., staprm.x,
-                 staprm.y, staprm.z);
-  }
-
-  // compute derivatives
   for (auto &kv1 : _obsParams)
   {
     for (auto &kv2 : kv1.second)
@@ -444,7 +406,9 @@ void Solver::computePartialDerivatives()
 
       // dip angle:  0(down):180(up) -> -90(down):+90(up)
       const double dip = obprm.takeOffAngleDip - degToRad(90);
-      // azimuth angle to backazimuth
+      // Make azimuth relative to the station(this is not the back
+      // azimuth, even though they are identical for a short event-station
+      // distance)
       const double azi      = obprm.takeOffAngleAzim - degToRad(180);
       const double slowness = 1. / obprm.velocityAtSrc;
 

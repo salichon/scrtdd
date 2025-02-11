@@ -1,5 +1,32 @@
-#define SEISCOMP_TEST_MODULE hdd
-#include <seiscomp/unittest/unittests.h>
+/***************************************************************************
+ * MIT License                                                             *
+ *                                                                         *
+ * Copyright (C) by ETHZ/SED                                               *
+ *                                                                         *
+ * Permission is hereby granted, free of charge, to any person obtaining a *
+ * copy of this software and associated documentation files (the           *
+ * “Software”), to deal in the Software without restriction, including     *
+ * without limitation the rights to use, copy, modify, merge, publish,     *
+ * distribute, sublicense, and/or sell copies of the Software, and to      *
+ * permit persons to whom the Software is furnished to do so, subject to   *
+ * the following conditions:                                               *
+ *                                                                         *
+ * The above copyright notice and this permission notice shall be          *
+ * included in all copies or substantial portions of the Software.         *
+ *                                                                         *
+ * THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND,         *
+ * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF      *
+ * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  *
+ * IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY    *
+ * CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,    *
+ * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE       *
+ * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                  *
+ *                                                                         *
+ *   Developed by Luca Scarabello <luca.scarabello@sed.ethz.ch>            *
+ ***************************************************************************/
+
+#define BOOST_TEST_MODULE libhdd
+#include <boost/test/included/unit_test.hpp>
 #include <boost/test/data/monomorphic.hpp>
 #include <boost/test/data/test_case.hpp>
 
@@ -27,31 +54,31 @@ void addStationsToCatalog(HDD::Catalog &cat,
 
   double distance = 25;
 
-  computeCoordinates(distance, 0, lat, lon, staLat, staLon);
+  computeCoordinates(distance, degToRad(0), lat, lon, staLat, staLon);
   sta = {"NET.ST01", staLat, staLon, 0, "NET", "ST01", ""};
   cat.addStation(sta);
-  computeCoordinates(distance, 90, lat, lon, staLat, staLon);
+  computeCoordinates(distance, degToRad(90), lat, lon, staLat, staLon);
   sta = {"NET.ST02", staLat, staLon, 0, "NET", "ST02", ""};
   cat.addStation(sta);
-  computeCoordinates(distance, 180, lat, lon, staLat, staLon);
+  computeCoordinates(distance, degToRad(180), lat, lon, staLat, staLon);
   sta = {"NET.ST03", staLat, staLon, 0, "NET", "ST03", ""};
   cat.addStation(sta);
-  computeCoordinates(distance, 270, lat, lon, staLat, staLon);
+  computeCoordinates(distance, degToRad(270), lat, lon, staLat, staLon);
   sta = {"NET.ST04", staLat, staLon, 0, "NET", "ST04", ""};
   cat.addStation(sta);
 
   distance = 15;
 
-  computeCoordinates(distance, 45, lat, lon, staLat, staLon);
+  computeCoordinates(distance, degToRad(45), lat, lon, staLat, staLon);
   sta = {"NET.ST05", staLat, staLon, 0, "NET", "ST05", ""};
   cat.addStation(sta);
-  computeCoordinates(distance, 135, lat, lon, staLat, staLon);
+  computeCoordinates(distance, degToRad(135), lat, lon, staLat, staLon);
   sta = {"NET.ST06", staLat, staLon, 0, "NET", "ST06", ""};
   cat.addStation(sta);
-  computeCoordinates(distance, 225, lat, lon, staLat, staLon);
+  computeCoordinates(distance, degToRad(225), lat, lon, staLat, staLon);
   sta = {"NET.ST07", staLat, staLon, 0, "NET", "ST07", ""};
   cat.addStation(sta);
-  computeCoordinates(distance, 315, lat, lon, staLat, staLon);
+  computeCoordinates(distance, degToRad(315), lat, lon, staLat, staLon);
   sta = {"NET.ST08", staLat, staLon, 0, "NET", "ST08", ""};
   cat.addStation(sta);
 }
@@ -73,7 +100,7 @@ void addEventToCatalog(HDD::Catalog &cat,
                        double lon,
                        double depth)
 {
-  Event ev{0};
+  Event ev{};
   ev.time                = time;
   ev.latitude            = lat;
   ev.longitude           = normalizeLon(lon);
@@ -96,13 +123,12 @@ void addEventToCatalog(HDD::Catalog &cat,
     ph.channelCode      = "";
     ph.isManual         = true;
 
-    double travelTime;
-    ttt.compute(ev, sta, "P", travelTime);
+    double travelTime = ttt.compute(ev, sta, "P");
     ph.time = ev.time + secToDur(travelTime);
     ph.type = "P";
     cat.addPhase(ph);
 
-    ttt.compute(ev, sta, "S", travelTime);
+    travelTime = ttt.compute(ev, sta, "S");
     ph.time = ev.time + secToDur(travelTime);
     ph.type = "S";
     cat.addPhase(ph);
@@ -120,8 +146,8 @@ void addEvents1ToCatalog(HDD::Catalog &cat,
 {
   double distance = extent / 2;
   double startLon, endLon, dummy;
-  computeCoordinates(distance, -90, lat, lon, dummy, startLon);
-  computeCoordinates(distance, 90, lat, lon, dummy, endLon);
+  computeCoordinates(distance, degToRad(-90), lat, lon, dummy, startLon, depth);
+  computeCoordinates(distance, degToRad(90), lat, lon, dummy, endLon, depth);
   const double lonStep = (endLon - startLon) / (numEvents - 1);
   for (int evn = -(numEvents / 2); evn < std::ceil(numEvents / 2.0); evn++)
   {
@@ -141,8 +167,8 @@ void addEvents2ToCatalog(HDD::Catalog &cat,
 {
   double distance = extent / 2;
   double startLat, endLat, dummy;
-  computeCoordinates(distance, 180, lat, lon, startLat, dummy);
-  computeCoordinates(distance, 0, lat, lon, endLat, dummy);
+  computeCoordinates(distance, degToRad(180), lat, lon, startLat, dummy, depth);
+  computeCoordinates(distance, degToRad(0), lat, lon, endLat, dummy, depth);
   double latStep = (endLat - startLat) / (numEvents - 1);
   for (int evn = -(numEvents / 2); evn < std::ceil(numEvents / 2.0); evn++)
   {
@@ -185,19 +211,19 @@ HDD::Catalog buildCatalog(HDD::TravelTimeTable &ttt,
   double distance = extent * 2.5;
   double clusterLat, clusterLon;
   // cluster 1
-  computeCoordinates(distance, 135, lat, lon, clusterLat, clusterLon);
+  computeCoordinates(distance, degToRad(135), lat, lon, clusterLat, clusterLon, depth);
   addEvents1ToCatalog(cat, ttt, time + secToDur(1), clusterLat, clusterLon,
                       depth, numEvents / 6, extent);
   // cluster 2
-  computeCoordinates(distance, 315, lat, lon, clusterLat, clusterLon);
+  computeCoordinates(distance, degToRad(315), lat, lon, clusterLat, clusterLon, depth);
   addEvents2ToCatalog(cat, ttt, time + secToDur(2), clusterLat, clusterLon,
                       depth, numEvents / 6, extent);
   // cluster 3
-  computeCoordinates(distance, 45, lat, lon, clusterLat, clusterLon);
+  computeCoordinates(distance, degToRad(45), lat, lon, clusterLat, clusterLon, depth);
   addEvents3ToCatalog(cat, ttt, time + secToDur(3), clusterLat, clusterLon,
                       depth, numEvents / 6, extent);
   // cluster 4
-  computeCoordinates(distance, 225, lat, lon, clusterLat, clusterLon);
+  computeCoordinates(distance, degToRad(225), lat, lon, clusterLat, clusterLon, depth);
   addEvents1ToCatalog(cat, ttt, time + secToDur(4), clusterLat, clusterLon,
                       depth, numEvents / 6, extent);
   addEvents2ToCatalog(cat, ttt, time + secToDur(4), clusterLat, clusterLon,
@@ -246,24 +272,24 @@ void randomPerturbation(HDD::Catalog &cat)
     Event ev = kv.second;
     ev.time += secToDur(timeDist.next());
 
+    ev.depth += depthDist.next();
+    if (ev.depth < 0) ev.depth = 0; 
+
     double distance = latDist.next();
     if ( distance >= 0 )
-      computeCoordinates(distance, 180, ev.latitude, ev.longitude,
-                         ev.latitude, ev.longitude);
+      computeCoordinates(distance, degToRad(180), ev.latitude, ev.longitude,
+                         ev.latitude, ev.longitude, ev.depth);
     else
-      computeCoordinates(-distance, 0, ev.latitude, ev.longitude,
-                         ev.latitude, ev.longitude);
+      computeCoordinates(-distance, degToRad(0), ev.latitude, ev.longitude,
+                         ev.latitude, ev.longitude, ev.depth);
 
     distance = lonDist.next();
     if ( distance >= 0 )
-      computeCoordinates(distance, 90, ev.latitude, ev.longitude,
-                         ev.latitude, ev.longitude);
+      computeCoordinates(distance, degToRad(90), ev.latitude, ev.longitude,
+                         ev.latitude, ev.longitude, ev.depth);
     else
-      computeCoordinates(-distance, 270, ev.latitude, ev.longitude,
-                         ev.latitude, ev.longitude); 
-
-    ev.depth += depthDist.next();
-    if (ev.depth < 0) ev.depth = 0;
+      computeCoordinates(-distance, degToRad(270), ev.latitude, ev.longitude,
+                         ev.latitude, ev.longitude, ev.depth);
 
     cat.updateEvent(ev);
   }
@@ -282,6 +308,7 @@ HDD::Catalog relocateCatalog(const HDD::Catalog &cat,
   HDD::ClusteringOptions clusterCfg;
   clusterCfg.numEllipsoids    = 0;
   clusterCfg.maxEllipsoidSize = 15;
+  clusterCfg.minEStoIEratio   = 0;
   // disable cross-correlation
   clusterCfg.xcorrMaxEvStaDist   = 0;
   clusterCfg.xcorrMaxInterEvDist = 0;
@@ -318,6 +345,7 @@ HDD::Catalog relocateSingleEvent(const HDD::Catalog &bgCat,
   clusterCfg.numEllipsoids    = 5;
   clusterCfg.maxEllipsoidSize = 15;
   clusterCfg.maxNumNeigh      = 40;
+  clusterCfg.minEStoIEratio   = 0;
   // disable cross-correlation
   clusterCfg.xcorrMaxEvStaDist   = 0;
   clusterCfg.xcorrMaxInterEvDist = 0;

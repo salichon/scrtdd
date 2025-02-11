@@ -24,9 +24,9 @@ As an example you may want to have a look at ``multi-event.sh`` script in `this 
 To relocate events not stored in a SeisComP database, refer to :ref:`multi-event-external-data-label`.
 
 
---------------
-The long story
---------------
+---------------
+Getting started
+---------------
 
 To relocate a catalog (multi-event) three pieces of information need to be provided: events data, waveform data and inventory information.
 
@@ -42,15 +42,32 @@ Waveform data can to be provided in several formats, see :ref:`waveform-label` f
 
 The multi-event relocation itself consists in running the command ``scrtdd --reloc-catalog [options]`` with appropirate options, discussed later.
 
-The output will be another catalog containing the relocated origins. Depending on the command line options this catalog is stored in plain text files or SCML format (which can be converted to QuakeML).
+The output will be another catalog containing the relocated origins. Depending on the command line options this catalog is stored in plain text files or SCML format (which can be converted to QuakeML using `sccnv command <https://www.seiscomp.de/doc/apps/sccnv.html>`_ ).
 
-In multi-event mode there is no interaction with the running SeisComP modules and nothing is writted to the database. It is a safe operation and allow for easy experimentation. However, the SCML output can be stored into the SeisComP database if required. That is optional.
+In multi-event mode there is no interaction with the running SeisComP modules nor with the database. It is a safe operation and allows for easy experimentation. However, the SCML output can eventually be imported into the SeisComP database if required. That is optional.
 
---------------------------------------
-Event catalog from SeisComP origin ids
---------------------------------------
+----------------------------
+Formats of the Event Catalog
+----------------------------
 
-There is a tool that is installed alongside rtDD, called ``sclistorg``, that is useful for listing origin ids satisfying certain criteria, such as time period, geographic area, author, agency and so on. E.g.::
+The catalog of the events to be relocated must be stored in a format that rtDD understands.
+
+Event Catalog: list of origin IDs
+---------------------------------
+
+One of the compatible formats is a text file containing the origin IDs. rtDD will use the origin IDs in the file to fetch all necessary information from the SeisComP database.
+
+E.g. *file myCatalog.csv* (a mandatory column named ``origin`` is required, but other column might be present too).::
+
+    origin
+    Origin/20181214107387.056851.253104
+    Origin/20180053105627.031726.697885
+    Origin/20190121103332.075405.6234534
+    Origin/20190223103327.031726.346363
+    [...]
+ 
+
+There is a tool that is installed alongside rtDD, called ``sclistorg``, that is useful for listing origin ids satisfying certain criteria, such as time period, geographic area, author, agency and so on. The output of sclistorg can then be used as the input Event Catalog of rtDD. E.g.::
 
     # list the preferred origin ids for all events between 2018-11-27 and 2018-12-14
     sclistorg --begin "2018-11-27 00:00:00" --end "2018-12-14 00:00:00" --org-type preferred [db options]
@@ -92,24 +109,11 @@ See ``sclistorg --help`` for a full list of options.::
       --area arg                    Include only origins in the rectangular area
                                     provided: MinLat,MinLon,MaxLat,MaxLon
 
--------------------------
-Formats of Events Catalog
--------------------------
 
-The origin ids of the events to be relocated must be stored in a format that rtDD understands.
+Event Catalog: plain csv files
+------------------------------
 
-One of the compatible formats is a text file containing the origin IDs (``sclistorg`` output is compatible with that). rtDD will use the origin IDs in the file to fetch all necessary information from the SeisComP database.
-
-E.g. *file myCatalog.csv* (a mandatory column named ``seiscompId`` is required, but other column might be present too).::
-
-    seiscompId
-    Origin/20181214107387.056851.253104
-    Origin/20180053105627.031726.697885
-    Origin/20190121103332.075405.6234534
-    Origin/20190223103327.031726.346363
-    [...]
-
-There is another format we can use to store a catalog. This format contains the full origins information, not only the origin ids. So, once the files are generated, there is no need to access the database anymore; so this format is quite fast to load. We can instruct rtDD to generate such a format with the following command::
+There is another format we can use to store a catalog. This format contains the full origins information, not only the origin ids. So, once the files are generated, there is no need to access the database anymore; so this format is quite fast to load. We can instruct rtDD to generate such a format starting from a list of origin IDs::
 
     scrtdd --dump-catalog myCatalog.csv --verbosity=3 --console=1 [db options]
 
@@ -183,7 +187,7 @@ Relocating a file containing a list of origin ids
 
 E.g. *file myCatalog.csv*::
 
-    seiscompId
+    origin
     Origin/20181214107387.056851.253104
     Origin/20180053105627.031726.697885
     [...]
@@ -225,7 +229,7 @@ Relocating a catalog in **"station.csv,event.csv,phase.csv"** file triplet forma
            --inventory-db inventory.xml \
            --verbosity=3 --console=1
 
-The inventory can optionally be empty, which is not an issue if the cross-correlation is not enabled. However when the cross-correlation is used the implication of having an empty invenory is that rtDD doesn't know the orientation of the sensor components and for this reason the special waveform transformations (rotation to the Transversal/Radial component, L2 norm of the horizontal components) become unavailable and should not be selected in ``profile.myProfile.crossCorrelation.p|s-phase.components``. The real componets should be selected instead (e.g. Z, E, N, 1, 2, 3).
+The inventory can optionally be empty, which is not an issue if the cross-correlation is not enabled. However when the cross-correlation is used there is a restriction on the selection of the componets to be used for P and S (`crossCorrelation.p-phase.components` and `crossCorrelation.s-phase.components`): with an empty inventory rtDD doesn't know the orientation of the sensor components and for this reason the special waveform transformations (rotation to the Transversal/Radial component, L2 norm of the horizontal components) become unavailable and should not be selected. Only real componets should be selected instead (e.g. Z, E, N, 1, 2, 3).
 
 This is an **empty inventory**::
 
@@ -242,6 +246,98 @@ Relocating a catalog in **SCML format** (the inventory is always required). The 
            -I fdsnws://service.iris.edu:80/fdsnws/dataselect/1/query  \
            --inventory-db inventory.xml \
            --verbosity=3 --console=1
+
+
+.. _multi-event-relocation-process-label:
+
+------------------
+Relocation Process
+------------------
+
+From a high level view the Multi-Event relocation performed by rtDD consists of few sequential steps:
+
+* clustering of the input events,  where independent clusters are identified and separated for the subsequent processing steps
+* differential time refinement via cross-correlation (:ref:`xcorr-event-label`).
+* the double-difference system creation
+* the double-difference system inversion
+
+The clustering algorithm defines which event is connect to which other using configurable settings such as maximum distance and the minimum number of phases at common stations. Events are part of the same cluster if they are directly connected through a phase at a common station of if there is a path of linked events between them. If that is not the case, the event belongs to a separate clusters. Each cluster is then relocated independently. 
+
+rtDD relocates each cluster by building and solving a double-difference system that includes every event pair and their phases selected during the clustering algorithm. We recall from the Waldhauser & Ellsworth's paper that the double-difference system is defined in matrix form as:
+
+.. math:: WGm = Wd
+   :label: dd-system-label
+
+where **G** defines a matrix of size M x 4N (M, number of double-difference equations; N, number of events) containing the partial derivatives, **d** is the data vector of size M containing the double-differences, **m** is a vector of length 4N, :math:`[\Delta x, \Delta y, \Delta z, \Delta \tau]^T`, containing the changes in hypocentral parameters we wish to determine, and *W* is a diagonal matrix of size M x M to weight each equation.
+
+To build the system, rtDD creates an equation for each phase k a pair of events i and j have at a common station. This is done for every event pair in a cluster. The equation is defined as:
+
+.. math:: \frac{\partial t_k^i}{\partial m} \Delta m^i  - \frac{\partial t_k^j}{\partial m} \Delta m^j = dr_k^{ij}
+   :label: dd-equation-label
+
+One side of the equation contains the double-difference :math:`dr_k^{ij}` and on the other side the partial derivatives :math:`\frac{\partial t_k}{\partial m}` and hypocerter changes :math:`\Delta m` (:math:`\Delta x, \Delta y, \Delta z, \Delta \tau`) we want to compute for the two paired events i and j so that the observed differential times equal the computed ones at a common station.
+
+The double-difference is defined as:
+
+.. math:: dr_k^{ij} = (t_k^i - t_k^j)^{observed} - (t_k^i - t_k^j)^{calculated}
+   :label: dd-label
+
+and t is the travel time for the phase k for the events i and j. The observed differential time can then be computed as the difference in phase travel times using the observed picks or it can be the cross-correlation lag between the phase waveforms. The calculated travel time is the difference of the theoretical phase travel times computed using a velocity model.
+
+The partial derivatives and hypocenter changes part of the equation :eq:`dd-equation-label` can be written in full as:
+
+.. math::
+
+   \frac{\partial t_k^i}{\partial m} \Delta m^i  - \frac{\partial t_k^j}{\partial m} \Delta m^j &= \frac{\partial t_k^i}{\partial x} \Delta x^i  + \frac{\partial t_k^i}{\partial y} \Delta y^i  +\frac{\partial t_k^i}{\partial z} \Delta z^i  + \Delta \tau^i - \\
+   & \frac{\partial t_k^j}{\partial x} \Delta x^j  - \frac{\partial t_k^j}{\partial y} \Delta y^j  - \frac{\partial t_k^j}{\partial z} \Delta z^j  - \Delta \tau^j
+
+
+In order to compute the partial derivatives and the calculated differential travel times a velocity model is required. To avoid the run time computational costs of ray tracing during the inversion, rtDD is designed to support precomputed travel time tables (including velocity at source and take-off angle). See :ref:`ttt-label`.
+
+The solution of the double-difference system as defined in :eq:`dd-system-label` is the set of hypocenters changes (latitude, longitude, depth and time) that minimizes the difference between the observed and the calculated differential times. That is, each event absolute location is moved so that its relative position with respect with the other events minimizes the double-difference residuals.
+
+This solution is achieved through an iterative process. An initial double-difference system is built and solved starting from the catalog events locations, the hypocenters are then updated based on the inversion solution and the process continues by building a new system and solving it again multiple times. This is repeated until a configured number of iterations is reached, usually between 10 and 20. At each iteration the solver also down-weighs the equations accordingly to their equation residuals (the down-weighing function follows what described in the Waldhauser & Ellsworth's paper). The apriori equation weights can also be configured to allow cross-correlated differential times to have higher weigh than differential times computed from absolute pick time difference and/or to take into account the pick time uncertainty. Differently to what described in Waldhauser & Ellsworth's paper the equations are not down-weighed by their inter-event distance. This is because the errors introduced by further events are already accounted for by the down-weighing by residuals: distant events have higher residuals than closer ones.
+
+The actual solution of the double-difference system at each iteration is achieved via a least square approach. rtDD can use both LSQR (by Chris Paige, Michael Saunders) or LSMR (by David Fong, Michael Saunders) algorithms, which both can solve sparse and dense linear equations and linear least-squares problems. rtDD doesn't offer an option to solve the system via Singular Value Decomposition, mainly due to the computational constraints of this method, which prevent it from being applied to large datasets.
+
+
+.. _absolute-plus-relative-label:
+
+------------------------------------------------
+Solving for both absolute and relative locations
+------------------------------------------------
+
+If an absolute location method searches for the location that better explains a set of arrival times, then a double-difference location method searches for the event locations that better explains the difference in arrival times between pair of events. Since this latter method does not take into consideration absolute arrival times, but only their difference, the inversion is susceptible to a possible shift of the event cluster: the locations of the events relative to each others improve (the cluster shape), but the centroid of the cluster might shift with respect to its true location.
+
+To compensate for this effect Waldhauser & Ellsworth offer two solutions. The first is to add four additional equations to the double-difference system - one for each coordinate direction and one for the origin time - that constrain to zero the mean shift of all the hypocenters during the inversion. Since this method is computationally efficient is also well suited for a SVD solver. However for a least-square approach, such as the one used by rtDD, Waldhauser & Ellsworth make use of regularization, that is a damped least-squares approach. The damping factor forces the solver to find the solution that not only minimizes the double-difference residuals, but also the changes to the hypocenters, preventing huge shifts in absolute locations. The damping factor also has the benefit of working on ill-conditioned systems. The effect of both techniques is that the relocated cluster centroid is placed more or less in what was the average location of the cluster events before the inversion.
+
+rtDD implements the second approach, since its solver is least squares based. The double-difference system :eq:`dd-system-label` with the inclusion of the damping factor :math:`\lambda` and the identity matrix I, of size 4N x 4N - with N being the number of events, then becomes:
+
+.. math:: \begin{vmatrix} W G \\ \lambda I \\ \end{vmatrix} m  = \begin{vmatrix} W d \\ 0 \\ \end{vmatrix}
+   :label: dd-damped-system-label
+
+
+An empirical approach to find the optimal damping factor value is to start with a very low value to observe the pure relative locations of the cluster(s) and then increase the value until the overlall RMS (travel time table RMS) is equal or better than what it was before the inversion. The process is usually not a trade-off and the final solution improves both the residuals of the double-difference system (relative location/cluster shape) and the travel time RMS (absolute location of the clusters).
+
+.. _inclusion-tt-residual-label:
+
+Inclusion of absolute travel time residuals in the double-difference system
+---------------------------------------------------------------------------
+
+rtDD includes an option that results in a modified double-difference system where both absolute and relative locations are taken into consideration. Solving such a system results in positioning the event cluster(s) in the absolute location that minimizes the overall  absolute travel time residuals (the average rms of all events in the cluster(s)) while positioning the events relative to each others so that their double-differences are minimized too, as it happens in the classic double-difference inversion. This variation of the double-difference system comes from the observation that the changes in absolute travel time residuals are known during the inversions and hence they can be constrained to be zero. The equation :eq:`dd-equation-label` contains the travel time change for the phase k, :math:`\frac{\partial t_k}{\partial m} \Delta m`. We can then include an equation in the double-difference system for every phase k of every event i that forces that travel time change to be equal to the travel time residual:
+
+
+.. math::  \frac{\partial t_k^i}{\partial m} \Delta m^i = (t_k^i)^{observed} - (t_k^i)^{calculated} = r_k^i
+   :label: rms-equation-label
+
+The double-difference system :eq:`dd-damped-system-label` then becomes:
+
+.. math:: \begin{vmatrix} W G \\ \omega K \\ \lambda I \\ \end{vmatrix} m  = \begin{vmatrix} W d \\ \omega r \\ 0 \\ \end{vmatrix} 
+   :label: dd-damped-rms-system-label
+
+Where K is a diagonal matrix containing the partial derivatives, r is the vector containing the absolute travel time residuals and :math:`\omega` is a scalar defining the weight we want to give to these new equations to balance their importance w.r.t. the double-difference residuals. If the sum of all the phases of all events in the system is Z, then K size is Z x Z and r size is Z. It is worth noting that in such a system, the damping factor :math:`\lambda` loses its importance and it can be set to 0 or a very low value.
+
+In practice we have observed that, with this modified double-difference system, the relocated cluster(s) are virtually the same, but their centroid(s) are shifted to the location that decreases the average RMS of all events in the cluster(s).
 
 
 ----------------------

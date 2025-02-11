@@ -16,13 +16,13 @@
  ***************************************************************************/
 
 #include "rtddtool.h"
-#include "hdd/adapters/sclog.h"
-#include "hdd/adapters/scttt.h"
-#include "hdd/adapters/scutils.h"
-#include "hdd/adapters/scwaveform.h"
 #include "hdd/csvreader.h"
 #include "hdd/cvttt.h"
 #include "hdd/nllttt.h"
+#include "hddsc/sclog.h"
+#include "hddsc/scttt.h"
+#include "hddsc/scutils.h"
+#include "hddsc/scwaveform.h"
 #include "msg.h"
 
 #define SEISCOMP_COMPONENT RTDD
@@ -363,6 +363,9 @@ void RTDD::createCommandLineDescription()
   commandline().addOption("ModeOptions", "xmlout",
                           "Enable XML output when combined with "
                           "--reloc-catalog or --oring-id options");
+  commandline().addOption("ModeOptions", "inherit-mag",
+                          "Origins inherit the source origin magnitudes "
+                          "when combined with --xmlout option");
 }
 
 bool RTDD::validateParameters()
@@ -608,8 +611,8 @@ bool RTDD::validateParameters()
     }
     catch (...)
     {
-      prof->singleEventClustering.minEStoIEratio = 0;
-      prof->multiEventClustering.minEStoIEratio  = 0;
+      prof->singleEventClustering.minEStoIEratio = 5;
+      prof->multiEventClustering.minEStoIEratio  = 5;
     }
 
     prefix = string("profile.") + prof->name +
@@ -684,8 +687,8 @@ bool RTDD::validateParameters()
     }
     catch (...)
     {
-      prof->singleEventClustering.xcorrMaxEvStaDist = 85;
-      prof->multiEventClustering.xcorrMaxEvStaDist  = 85;
+      prof->singleEventClustering.xcorrMaxEvStaDist = 0;
+      prof->multiEventClustering.xcorrMaxEvStaDist  = 0;
     }
     try
     {
@@ -1287,9 +1290,10 @@ bool RTDD::run()
 
         DataModel::OriginPtr newOrg;
         std::vector<DataModel::PickPtr> newOrgPicks;
+        bool includeMagnitude = commandline().hasOption("inherit-mag");
         convertOrigin(dataSrc, *ev, srcOrg.get(), author(), agencyID(),
-                      profile->methodID, profile->earthModelID, true, false,
-                      true, newOrg, newOrgPicks);
+                      profile->methodID, profile->earthModelID,
+                      includeMagnitude, true, newOrg, newOrgPicks);
 
         evParam->add(newOrg.get());
         for (DataModel::PickPtr p : newOrgPicks) evParam->add(p.get());
@@ -1485,7 +1489,7 @@ void RTDD::checkProfileStatus()
     // periodic clean up of profiles
     if (_config.profileTimeAlive >= 0)
     {
-      Core::TimeSpan expired = Core::TimeSpan(_config.profileTimeAlive);
+      Core::TimeSpan expired = Core::TimeSpan(_config.profileTimeAlive, 0);
       if (currProfile->isLoaded() && currProfile->inactiveTime() > expired)
       {
         SEISCOMP_INFO(
@@ -1627,7 +1631,7 @@ bool RTDD::addProcess(DataModel::PublicObject *obj)
   proc->cronjob->runTimes.clear();
   for (size_t i = 0; i < _config.delayTimes.size(); ++i)
     proc->cronjob->runTimes.push_back(now +
-                                      Core::TimeSpan(_config.delayTimes[i]));
+                                      Core::TimeSpan(_config.delayTimes[i], 0));
 
   SEISCOMP_DEBUG("Update runTimes for [%s]", proc->obj->publicID().c_str());
 
@@ -1858,7 +1862,7 @@ void RTDD::relocateOrigin(DataModel::Origin *org,
   DataSource dataSrc(query(), &_cache, _eventParameters.get());
   convertOrigin(dataSrc, *relocatedOrg, org, author(), agencyID(),
                 profile->methodID, profile->earthModelID, includeMagnitude,
-                true, false, newOrg, newOrgPicks);
+                false, newOrg, newOrgPicks);
 }
 
 std::unique_ptr<HDD::Catalog>
@@ -2026,7 +2030,7 @@ std::vector<DataModel::OriginPtr> RTDD::fetchOrigins(const std::string &idFile,
 
   for (const auto &row : HDD::CSV::readWithHeader(idFile))
   {
-    const string &id = row.at("seiscompId");
+    const string &id = row.at("origin");
 
     DataModel::OriginPtr org = _cache.get<DataModel::Origin>(id);
 

@@ -1,12 +1,39 @@
-#define SEISCOMP_TEST_MODULE hdd
-#include <seiscomp/unittest/unittests.h>
+/***************************************************************************
+ * MIT License                                                             *
+ *                                                                         *
+ * Copyright (C) by ETHZ/SED                                               *
+ *                                                                         *
+ * Permission is hereby granted, free of charge, to any person obtaining a *
+ * copy of this software and associated documentation files (the           *
+ * “Software”), to deal in the Software without restriction, including     *
+ * without limitation the rights to use, copy, modify, merge, publish,     *
+ * distribute, sublicense, and/or sell copies of the Software, and to      *
+ * permit persons to whom the Software is furnished to do so, subject to   *
+ * the following conditions:                                               *
+ *                                                                         *
+ * The above copyright notice and this permission notice shall be          *
+ * included in all copies or substantial portions of the Software.         *
+ *                                                                         *
+ * THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND,         *
+ * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF      *
+ * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  *
+ * IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY    *
+ * CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,    *
+ * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE       *
+ * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                  *
+ *                                                                         *
+ *   Developed by Luca Scarabello <luca.scarabello@sed.ethz.ch>            *
+ ***************************************************************************/
+
+#define BOOST_TEST_MODULE libhdd
+#include <boost/test/included/unit_test.hpp>
 #include <boost/test/data/monomorphic.hpp>
 #include <boost/test/data/test_case.hpp>
 
+#include "common.ipp"
 #include "hdd/catalog.h"
 #include "hdd/ttt.h"
 #include "hdd/utils.h"
-#include "common.ipp"
 
 using namespace std;
 using namespace HDD;
@@ -86,26 +113,26 @@ vector<Delta> deltaList = {
     {-0.4, -0.4, 8},
     {-0.4, -0.4, 16},
     //
-    {0.7, 0, 1},
-    {0.7, 0, 2},
-    {0.7, 0, 4},
-    {0.7, 0, 8},
-    {0.7, 0, 16},
-    {0, 0.7, 1},
-    {0, 0.7, 2},
-    {0, 0.7, 4},
-    {0, 0.7, 8},
-    {0, 0.7, 16},
-    {-0.7, 0, 1},
-    {-0.7, 0, 2},
-    {-0.7, 0, 4},
-    {-0.7, 0, 8},
-    {-0.7, 0, 16},
-    {0, -0.7, 1},
-    {0, -0.7, 2},
-    {0, -0.7, 4},
-    {0, -0.7, 8},
-    {0, -0.7, 16},
+    {0.6, 0, 1},
+    {0.6, 0, 2},
+    {0.6, 0, 4},
+    {0.6, 0, 8},
+    {0.6, 0, 16},
+    {0, 0.6, 1},
+    {0, 0.6, 2},
+    {0, 0.6, 4},
+    {0, 0.6, 8},
+    {0, 0.6, 16},
+    {-0.6, 0, 1},
+    {-0.6, 0, 2},
+    {-0.6, 0, 4},
+    {-0.6, 0, 8},
+    {-0.6, 0, 16},
+    {0, -0.6, 1},
+    {0, -0.6, 2},
+    {0, -0.6, 4},
+    {0, -0.6, 8},
+    {0, -0.6, 16},
 };
 
 } // namespace
@@ -148,6 +175,11 @@ BOOST_DATA_TEST_CASE(test_ttt, bdata::xrange(deltaList.size()), deltaIdx)
       BOOST_CHECK_NO_THROW(ttt->compute(
           lat, lon, depth, station, "S", travelTimeS[i], takeOffAngleAzimS[i],
           takeOffAngleDipS[i], velocityAtSrcS[i]));
+
+      BOOST_CHECK_EQUAL(travelTimeP[i],
+                        ttt->compute(lat, lon, depth, station, "P"));
+      BOOST_CHECK_EQUAL(travelTimeS[i],
+                        ttt->compute(lat, lon, depth, station, "S"));
     }
 
     for (size_t i = 0; i < tttList.size(); i++)

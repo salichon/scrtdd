@@ -1,3 +1,30 @@
+/***************************************************************************
+ * MIT License                                                             *
+ *                                                                         *
+ * Copyright (C) by ETHZ/SED                                               *
+ *                                                                         *
+ * Permission is hereby granted, free of charge, to any person obtaining a *
+ * copy of this software and associated documentation files (the           *
+ * “Software”), to deal in the Software without restriction, including     *
+ * without limitation the rights to use, copy, modify, merge, publish,     *
+ * distribute, sublicense, and/or sell copies of the Software, and to      *
+ * permit persons to whom the Software is furnished to do so, subject to   *
+ * the following conditions:                                               *
+ *                                                                         *
+ * The above copyright notice and this permission notice shall be          *
+ * included in all copies or substantial portions of the Software.         *
+ *                                                                         *
+ * THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND,         *
+ * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF      *
+ * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  *
+ * IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY    *
+ * CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,    *
+ * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE       *
+ * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                  *
+ *                                                                         *
+ *   Developed by Luca Scarabello <luca.scarabello@sed.ethz.ch>            *
+ ***************************************************************************/
+
 #define SEISCOMP_TEST_MODULE hdd
 #include <seiscomp/unittest/unittests.h>
 #include <boost/test/data/monomorphic.hpp>
@@ -24,23 +51,23 @@ void addStationsToCatalog(HDD::Catalog &cat,
   Station sta;
   double staLat, staLon;
 
-  computeCoordinates(distance, 0, lat, lon, staLat, staLon);
+  computeCoordinates(distance, degToRad(0), lat, lon, staLat, staLon);
   sta = {"NET.ST01", staLat, staLon, 250, "NET", "ST01", ""};
   cat.addStation(sta);
-  computeCoordinates(distance, 90, lat, lon, staLat, staLon);
+  computeCoordinates(distance, degToRad(90), lat, lon, staLat, staLon);
   sta = {"NET.ST02", staLat, staLon, 295, "NET", "ST02", ""};
   cat.addStation(sta);
-  computeCoordinates(distance, 180, lat, lon, staLat, staLon);
+  computeCoordinates(distance, degToRad(180), lat, lon, staLat, staLon);
   sta = {"NET.ST03", staLat, staLon, 301, "NET", "ST03", ""};
   cat.addStation(sta);
-  computeCoordinates(distance, 270, lat, lon, staLat, staLon);
+  computeCoordinates(distance, degToRad(270), lat, lon, staLat, staLon);
   sta = {"NET.ST04", staLat, staLon, 395, "NET", "ST04", ""};
   cat.addStation(sta);
 }
 
 void addEventToCatalog(HDD::Catalog &cat, double lat, double lon, double depth)
 {
-  Event ev{0};
+  Event ev{};
   ev.latitude            = lat;
   ev.longitude           = lon;
   ev.depth               = depth;
@@ -77,17 +104,17 @@ void addNeighboursToCatalog(HDD::Catalog &cat,
     double depth = event.depth;
 
     double neighbourLat, neighbourLon;
-    computeCoordinates(distance, 45, event.latitude, event.longitude,
-                       neighbourLat, neighbourLon);
+    computeCoordinates(distance, degToRad(45), event.latitude, event.longitude,
+                       neighbourLat, neighbourLon, depth);
     addEventToCatalog(cat, neighbourLat, neighbourLon, depth);
-    computeCoordinates(distance, 135, event.latitude, event.longitude,
-                       neighbourLat, neighbourLon);
+    computeCoordinates(distance, degToRad(135), event.latitude, event.longitude,
+                       neighbourLat, neighbourLon, depth);
     addEventToCatalog(cat, neighbourLat, neighbourLon, depth);
-    computeCoordinates(distance, 225, event.latitude, event.longitude,
-                       neighbourLat, neighbourLon);
+    computeCoordinates(distance, degToRad(225), event.latitude, event.longitude,
+                       neighbourLat, neighbourLon, depth);
     addEventToCatalog(cat, neighbourLat, neighbourLon, depth);
-    computeCoordinates(distance, 315, event.latitude, event.longitude,
-                       neighbourLat, neighbourLon);
+    computeCoordinates(distance, degToRad(315), event.latitude, event.longitude,
+                       neighbourLat, neighbourLon, depth);
     addEventToCatalog(cat, neighbourLat, neighbourLon, depth);
   }
 }

@@ -1,30 +1,45 @@
 /***************************************************************************
- *   Copyright (C) by ETHZ/SED                                             *
+ * MIT License                                                             *
  *                                                                         *
- * This program is free software: you can redistribute it and/or modify    *
- * it under the terms of the GNU LESSER GENERAL PUBLIC LICENSE as          *
- * published by the Free Software Foundation, either version 3 of the      *
- * License, or (at your option) any later version.                         *
+ * Copyright (C) by ETHZ/SED                                               *
  *                                                                         *
- * This software is distributed in the hope that it will be useful,        *
- * but WITHOUT ANY WARRANTY; without even the implied warranty of          *
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the           *
- * GNU Affero General Public License for more details.                     *
+ * Permission is hereby granted, free of charge, to any person obtaining a *
+ * copy of this software and associated documentation files (the           *
+ * “Software”), to deal in the Software without restriction, including     *
+ * without limitation the rights to use, copy, modify, merge, publish,     *
+ * distribute, sublicense, and/or sell copies of the Software, and to      *
+ * permit persons to whom the Software is furnished to do so, subject to   *
+ * the following conditions:                                               *
+ *                                                                         *
+ * The above copyright notice and this permission notice shall be          *
+ * included in all copies or substantial portions of the Software.         *
+ *                                                                         *
+ * THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND,         *
+ * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF      *
+ * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  *
+ * IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY    *
+ * CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,    *
+ * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE       *
+ * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                  *
  *                                                                         *
  *   Developed by Luca Scarabello <luca.scarabello@sed.ethz.ch>            *
  ***************************************************************************/
 
 #include "utils.h"
 #include "csvreader.h"
-#include "geo.h"
 #include "log.h"
-#include <boost/filesystem.hpp>
 #include <fstream>
 #include <stdarg.h>
 
-using namespace std;
-
+#ifdef USE_BOOST_FS
+#include <boost/filesystem.hpp>
 namespace fs = boost::filesystem;
+#else
+#include <filesystem>
+namespace fs = std::filesystem;
+#endif
+
+using namespace std;
 
 namespace HDD {
 
@@ -96,25 +111,160 @@ std::vector<std::string> splitString(const std::string &str,
 }
 
 /*
+ * Computes the azimuth [radiant] of the point lat2,lon2 as seen from
+ * lat1,lon1
+ *
+ * All these formulas are for calculations on the basis of a spherical
+ * earth (ignoring ellipsoidal effects)
+ *
+ */
+double computeAzimuth(double lat1, double lon1, double lat2, double lon2)
+{
+  const double deltaLon = degToRad(lon2 - lon1);
+  const double Fi1      = degToRad(lat1);
+  const double Fi2      = degToRad(lat2);
+  const double cosLat2  = cos(Fi2);
+
+  if (lat1 == lat2 && (lat1 == 90 || lat1 == -90 || deltaLon == 0))
+  {
+    return 0.;
+  }
+
+  const double y = sin(deltaLon) * cosLat2;
+  const double x = cos(Fi1) * sin(Fi2) - sin(Fi1) * cosLat2 * cos(deltaLon);
+
+  const double azimuth = atan2(y, x);
+  if (!std::isfinite(azimuth))
+  {
+    throw Exception("Internal logic error: computeAzimuth failed");
+  }
+
+  return azimuth;
+}
+
+/*
  * Computes the coordinates (lat, lon) of the point which is at the
- * passed azimuth degree and km distance as seen from the centroid
- * (clat, clon)
+ * passed azimuth [radiant] and distance [radiant] (angularDistance true)
+ * or [km] (angularDistance false and set `atKmDepth` approprieatly) as seen
+ * from the point at latitude, longitude [clat, clon]
+ *
+ * All these formulas are for calculations on the basis of a spherical
+ * earth (ignoring ellipsoidal effects)
+ *
  */
 void computeCoordinates(double distance,
                         double azimuth,
                         double clat,
                         double clon,
                         double &lat,
-                        double &lon)
+                        double &lon,
+                        double atKmDepth,
+                        bool angularDistance)
 {
-  delandaz2coord(km2deg(distance), azimuth, clat, clon, &lat, &lon);
-  lon = normalizeLon(lon);
+  if (distance == 0)
+  {
+    lat = clat;
+    lon = clon;
+    return;
+  }
+
+  if (!angularDistance)
+  {
+    distance = km2rad(distance, atKmDepth);
+  }
+  clat = degToRad(clat);
+  clon = degToRad(clon);
+
+  const double cosCLat = cos(clat);
+  const double sinCLat = sin(clat);
+  const double cosDist = cos(distance);
+  const double sinDist = sin(distance);
+
+  lat = asin(sinCLat * cosDist + cosCLat * sinDist * cos(azimuth));
+  lon = clon +
+        atan2(sin(azimuth) * sinDist * cosCLat, cosDist - sinCLat * sin(lat));
+
+  if (!std::isfinite(lat) || !std::isfinite(lon))
+  {
+    throw Exception("Internal logic error: computeCoordinates failed");
+  }
+
+  lat = radToDeg(lat);
+  lon = normalizeLon(radToDeg(lon));
 }
 
 /*
- * Compute distance in km between two points and optionally
- * `azimuth` and `backazimuth`.
+ * Compute distance [radiant] (`angularDistance` true) or [km]
+ * (`angularDistance` false and set `atKmDepth` approprieatly) between two
+ * points and optionally `azimuth` and `backazimuth` [radiants]
+ *
+ * All these formulas are for calculations on the basis of a spherical
+ * earth (ignoring ellipsoidal effects)
+ *
  */
+double computeDistance(double lat1,
+                       double lon1,
+                       double lat2,
+                       double lon2,
+                       double *azimuth,
+                       double *backAzimuth,
+                       double atKmDepth,
+                       bool angularDistance)
+{
+  const double deltaLat = degToRad(lat2 - lat1);
+  const double deltaLon = degToRad(lon2 - lon1);
+  const double Fi1      = degToRad(lat1);
+  const double Fi2      = degToRad(lat2);
+  const double cosLat1  = cos(Fi1);
+  const double cosLat2  = cos(Fi2);
+  const double sinLat1  = sin(Fi1);
+  const double sinLat2  = sin(Fi2);
+
+  if (lat1 == lat2 && (lat1 == 90 || lat1 == -90 || deltaLon == 0))
+  {
+    if (azimuth) *azimuth = 0.;
+    if (backAzimuth) *backAzimuth = 0.;
+    return 0.;
+  }
+
+  double a = square(sin(deltaLat / 2.)) +
+             cosLat1 * cosLat2 * square(sin(deltaLon / 2.));
+
+  double distance = 2. * atan2(sqrt(a), sqrt(1. - a));
+  if (!std::isfinite(distance))
+  {
+    throw Exception("Internal logic error: computeDistance failed");
+  }
+
+  auto computeAzimuth = [](double deltaLon, double cosLat1, double cosLat2,
+                           double sinLat1, double sinLat2) {
+    double y = sin(deltaLon) * cosLat2;
+    double x = cosLat1 * sinLat2 - sinLat1 * cosLat2 * cos(deltaLon);
+    return atan2(y, x);
+  };
+
+  if (azimuth)
+  {
+    *azimuth = computeAzimuth(deltaLon, cosLat1, cosLat2, sinLat1, sinLat2);
+    if (!std::isfinite(*azimuth))
+    {
+      throw Exception("Internal logic error: computeDistance failed");
+    }
+  }
+
+  if (backAzimuth)
+  {
+    *backAzimuth = computeAzimuth(degToRad(lon1 - lon2), cosLat2, cosLat1,
+                                  sinLat2, sinLat1);
+    if (!std::isfinite(*backAzimuth))
+    {
+      throw Exception("Internal logic error: computeDistance failed");
+    }
+  }
+
+  return angularDistance ? distance : rad2km(distance, atKmDepth);
+}
+
 double computeDistance(double lat1,
                        double lon1,
                        double depth1,
@@ -124,31 +274,12 @@ double computeDistance(double lat1,
                        double *azimuth,
                        double *backAzimuth)
 {
-  double Hdist = computeDistance(lat1, lon1, lat2, lon2, azimuth, backAzimuth);
-
+  double atKmDepth = (depth1 + depth2) / 2.;
+  double Hdist =
+      computeDistance(lat1, lon1, lat2, lon2, azimuth, backAzimuth, atKmDepth);
   if (depth1 == depth2) return Hdist;
-
-  // Use the Euclidean distance. This approximation is sufficient when the
-  // distance is small and the Earth curvature can be assumed flat.
   double Vdist = abs(depth1 - depth2);
   return std::sqrt(square(Hdist) + square(Vdist));
-}
-
-double computeDistance(double lat1,
-                       double lon1,
-                       double lat2,
-                       double lon2,
-                       double *azimuth,
-                       double *backAzimuth)
-{
-  double dist, az, baz;
-  delazi(lat1, lon1, lat2, lon2, &dist, &az, &baz);
-  dist = deg2km(dist);
-
-  if (azimuth) *azimuth = az;
-  if (backAzimuth) *backAzimuth = baz;
-
-  return dist;
 }
 
 double computeDistance(const Catalog::Event &ev1,
@@ -192,8 +323,7 @@ bool directoryEmpty(const std::string &path)
 {
   try
   {
-    return !boost::filesystem::exists(path) ||
-           (fs::is_directory(path) && fs::is_empty(path));
+    return !fs::exists(path) || (fs::is_directory(path) && fs::is_empty(path));
   }
   catch (exception &e)
   {

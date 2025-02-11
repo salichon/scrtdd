@@ -1,15 +1,26 @@
 /***************************************************************************
- *   Copyright (C) by ETHZ/SED                                             *
+ * MIT License                                                             *
  *                                                                         *
- * This program is free software: you can redistribute it and/or modify    *
- * it under the terms of the GNU LESSER GENERAL PUBLIC LICENSE as          *
- * published by the Free Software Foundation, either version 3 of the      *
- * License, or (at your option) any later version.                         *
+ * Copyright (C) by ETHZ/SED                                               *
  *                                                                         *
- * This software is distributed in the hope that it will be useful,        *
- * but WITHOUT ANY WARRANTY; without even the implied warranty of          *
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the           *
- * GNU Affero General Public License for more details.                     *
+ * Permission is hereby granted, free of charge, to any person obtaining a *
+ * copy of this software and associated documentation files (the           *
+ * “Software”), to deal in the Software without restriction, including     *
+ * without limitation the rights to use, copy, modify, merge, publish,     *
+ * distribute, sublicense, and/or sell copies of the Software, and to      *
+ * permit persons to whom the Software is furnished to do so, subject to   *
+ * the following conditions:                                               *
+ *                                                                         *
+ * The above copyright notice and this permission notice shall be          *
+ * included in all copies or substantial portions of the Software.         *
+ *                                                                         *
+ * THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND,         *
+ * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF      *
+ * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  *
+ * IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY    *
+ * CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,    *
+ * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE       *
+ * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                  *
  *                                                                         *
  *   Developed by Luca Scarabello <luca.scarabello@sed.ethz.ch>            *
  ***************************************************************************/
@@ -37,8 +48,8 @@ public:
     error,
   };
 
-  Logger()               = delete;
-  Logger(const Logger &) = delete;
+  Logger()                       = delete;
+  Logger(const Logger &)         = delete;
   void operator=(const Logger &) = delete;
 
   static void registerLoggers(
@@ -80,7 +91,7 @@ public:
   public:
     File(const std::function<void(void)> &cleanup) : _cleanup(cleanup) {}
     ~File() { _cleanup(); }
-    File(const File &) = delete;
+    File(const File &)           = delete;
     void operator=(const File &) = delete;
 
   private:
@@ -112,7 +123,7 @@ inline void log(const Logger::Level l, const std::string &s)
 }
 inline void log(const Logger::Level l, std::string &&s) { Logger::log(l, s); }
 
-template <typename... Args> void log(const Logger::Level l, Args &&... args)
+template <typename... Args> void log(const Logger::Level l, Args &&...args)
 {
   Logger::log(l, strf(std::forward<Args>(args)...));
 }
@@ -121,7 +132,7 @@ inline void logDebug(const char *s) { Logger::logDebug(s); }
 inline void logDebug(const std::string &s) { Logger::logDebug(s); }
 inline void logDebug(std::string &&s) { Logger::logDebug(s); }
 
-template <typename... Args> void logDebug(Args &&... args)
+template <typename... Args> void logDebug(Args &&...args)
 {
   Logger::logDebug(strf(std::forward<Args>(args)...));
 }
@@ -130,7 +141,7 @@ inline void logInfo(const char *s) { Logger::logInfo(s); }
 inline void logInfo(const std::string &s) { Logger::logInfo(s); }
 inline void logInfo(std::string &&s) { Logger::logInfo(s); }
 
-template <typename... Args> void logInfo(Args &&... args)
+template <typename... Args> void logInfo(Args &&...args)
 {
   Logger::logInfo(strf(std::forward<Args>(args)...));
 }
@@ -139,7 +150,7 @@ inline void logWarning(const char *s) { Logger::logWarning(s); }
 inline void logWarning(const std::string &s) { Logger::logWarning(s); }
 inline void logWarning(std::string &&s) { Logger::logWarning(s); }
 
-template <typename... Args> void logWarning(Args &&... args)
+template <typename... Args> void logWarning(Args &&...args)
 {
   Logger::logWarning(strf(std::forward<Args>(args)...));
 }
@@ -148,7 +159,7 @@ inline void logError(const char *s) { Logger::logError(s); }
 inline void logError(const std::string &s) { Logger::logError(s); }
 inline void logError(std::string &&s) { Logger::logError(s); }
 
-template <typename... Args> void logError(Args &&... args)
+template <typename... Args> void logError(Args &&...args)
 {
   Logger::logError(strf(std::forward<Args>(args)...));
 }

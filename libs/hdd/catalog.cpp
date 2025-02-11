@@ -1,15 +1,26 @@
 /***************************************************************************
- *   Copyright (C) by ETHZ/SED                                             *
+ * MIT License                                                             *
  *                                                                         *
- * This program is free software: you can redistribute it and/or modify    *
- * it under the terms of the GNU LESSER GENERAL PUBLIC LICENSE as          *
- * published by the Free Software Foundation, either version 3 of the      *
- * License, or (at your option) any later version.                         *
+ * Copyright (C) by ETHZ/SED                                               *
  *                                                                         *
- * This software is distributed in the hope that it will be useful,        *
- * but WITHOUT ANY WARRANTY; without even the implied warranty of          *
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the           *
- * GNU Affero General Public License for more details.                     *
+ * Permission is hereby granted, free of charge, to any person obtaining a *
+ * copy of this software and associated documentation files (the           *
+ * “Software”), to deal in the Software without restriction, including     *
+ * without limitation the rights to use, copy, modify, merge, publish,     *
+ * distribute, sublicense, and/or sell copies of the Software, and to      *
+ * permit persons to whom the Software is furnished to do so, subject to   *
+ * the following conditions:                                               *
+ *                                                                         *
+ * The above copyright notice and this permission notice shall be          *
+ * included in all copies or substantial portions of the Software.         *
+ *                                                                         *
+ * THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND,         *
+ * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF      *
+ * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  *
+ * IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY    *
+ * CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,    *
+ * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE       *
+ * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                  *
  *                                                                         *
  *   Developed by Luca Scarabello <luca.scarabello@sed.ethz.ch>            *
  ***************************************************************************/
@@ -93,12 +104,14 @@ Catalog::Catalog(const string &stationFile,
     throw Exception(msg);
   }
 
-  vector<unordered_map<string, string>> stations =
-      CSV::readWithHeader(stationFile);
+  unsigned row_count = 0;
   try
   {
+    vector<unordered_map<string, string>> stations =
+        CSV::readWithHeader(stationFile);
     for (const auto &row : stations)
     {
+      row_count++;
       Station sta;
       sta.latitude     = std::stod(row.at("latitude"));
       sta.longitude    = std::stod(row.at("longitude"));
@@ -110,19 +123,21 @@ Catalog::Catalog(const string &stationFile,
       _stations[sta.id] = sta;
     }
   }
-  catch (std::out_of_range &e)
+  catch (std::exception &e)
   {
-    string msg =
-        strf("Error while parsing station file '%s': check column names",
-             stationFile.c_str());
+    string msg = strf("Error while parsing file '%s' at row %d (%s)",
+                      stationFile.c_str(), row_count, e.what());
     throw Exception(msg);
   }
 
-  vector<unordered_map<string, string>> events = CSV::readWithHeader(eventFile);
+  row_count = 0;
   try
   {
+    vector<unordered_map<string, string>> events =
+        CSV::readWithHeader(eventFile);
     for (const auto &row : events)
     {
+      row_count++;
       Event ev;
       ev.id                    = std::stoul(row.at("id"));
       ev.time                  = UTCClock::fromString(row.at("isotime"));
@@ -165,18 +180,20 @@ Catalog::Catalog(const string &stationFile,
       _events[ev.id] = ev;
     }
   }
-  catch (std::out_of_range &e)
+  catch (std::exception &e)
   {
-    string msg = strf("Error while parsing event file '%s': check column names",
-                      eventFile.c_str());
+    string msg = strf("Error while parsing file '%s' at row %d (%s)",
+                      eventFile.c_str(), row_count, e.what());
     throw Exception(msg);
   }
 
-  vector<unordered_map<string, string>> phases = CSV::readWithHeader(phaFile);
+  row_count = 0;
   try
   {
+    vector<unordered_map<string, string>> phases = CSV::readWithHeader(phaFile);
     for (const auto &row : phases)
     {
+      row_count++;
       Phase ph;
       ph.eventId          = std::stoul(row.at("eventId"));
       ph.time             = UTCClock::fromString(row.at("isotime"));
@@ -209,10 +226,10 @@ Catalog::Catalog(const string &stationFile,
       _phases.emplace(ph.eventId, ph);
     }
   }
-  catch (std::out_of_range &e)
+  catch (std::exception &e)
   {
-    string msg = strf("Error while parsing phase file '%s': check column names",
-                      phaFile.c_str());
+    string msg = strf("Error while parsing file '%s' at row %d (%s)",
+                      phaFile.c_str(), row_count, e.what());
     throw Exception(msg);
   }
 }
@@ -436,9 +453,9 @@ void Catalog::addPhase(const Phase &phase)
   _phases.emplace(phase.eventId, phase);
 }
 
-void Catalog::writeToFile(string eventFile,
-                          string phaseFile,
-                          string stationFile) const
+void Catalog::writeToFile(const string &eventFile,
+                          const string &phaseFile,
+                          const string &stationFile) const
 {
   /*
    * write events
@@ -464,7 +481,7 @@ void Catalog::writeToFile(string eventFile,
     const Catalog::Event &ev = kv.second;
 
     stringstream evStream;
-    evStream << strf("%u,%s,%.6f,%.6f,%.4f,%.2f", ev.id,
+    evStream << strf("%u,%s,%.12f,%.12f,%.10f,%.2f", ev.id,
                      UTCClock::toString(ev.time).c_str(), ev.latitude,
                      ev.longitude, ev.depth, ev.magnitude);
 
@@ -557,7 +574,7 @@ void Catalog::writeToFile(string eventFile,
   for (const auto &kv : orderedStations)
   {
     const Catalog::Station &sta = kv.second;
-    staStream << strf("%.6f,%.6f,%.1f,%s,%s,%s", sta.latitude, sta.longitude,
+    staStream << strf("%.12f,%.12f,%.7f,%s,%s,%s", sta.latitude, sta.longitude,
                       sta.elevation, sta.networkCode.c_str(),
                       sta.stationCode.c_str(), sta.locationCode.c_str())
               << endl;

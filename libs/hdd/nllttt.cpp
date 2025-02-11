@@ -1,15 +1,26 @@
 /***************************************************************************
- *   Copyright (C) by ETHZ/SED                                             *
+ * MIT License                                                             *
  *                                                                         *
- * This program is free software: you can redistribute it and/or modify    *
- * it under the terms of the GNU LESSER GENERAL PUBLIC LICENSE as          *
- * published by the Free Software Foundation, either version 3 of the      *
- * License, or (at your option) any later version.                         *
+ * Copyright (C) by ETHZ/SED                                               *
  *                                                                         *
- * This software is distributed in the hope that it will be useful,        *
- * but WITHOUT ANY WARRANTY; without even the implied warranty of          *
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the           *
- * GNU Affero General Public License for more details.                     *
+ * Permission is hereby granted, free of charge, to any person obtaining a *
+ * copy of this software and associated documentation files (the           *
+ * “Software”), to deal in the Software without restriction, including     *
+ * without limitation the rights to use, copy, modify, merge, publish,     *
+ * distribute, sublicense, and/or sell copies of the Software, and to      *
+ * permit persons to whom the Software is furnished to do so, subject to   *
+ * the following conditions:                                               *
+ *                                                                         *
+ * The above copyright notice and this permission notice shall be          *
+ * included in all copies or substantial portions of the Software.         *
+ *                                                                         *
+ * THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND,         *
+ * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF      *
+ * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  *
+ * IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY    *
+ * CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,    *
+ * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE       *
+ * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                  *
  *                                                                         *
  *   Developed by Luca Scarabello <luca.scarabello@sed.ethz.ch>            *
  ***************************************************************************/
@@ -40,15 +51,15 @@ void TravelTimeTable::freeResources()
   _angleGrids.clear();
 }
 
-void TravelTimeTable::compute(double eventLat,
-                              double eventLon,
-                              double eventDepth,
-                              const Catalog::Station &station,
-                              const std::string &phaseType,
-                              double &travelTime)
+double TravelTimeTable::compute(double eventLat,
+                                double eventLon,
+                                double eventDepth,
+                                const Catalog::Station &station,
+                                const std::string &phaseType)
 {
   string timeGId =
       "timeGrid:" + Grid::filePath(_timeGridPath, station, phaseType);
+  double travelTime;
   try
   {
     travelTime =
@@ -79,6 +90,7 @@ void TravelTimeTable::compute(double eventLat,
     travelTime =
         _timeGrids.get(timeGId)->getTime(eventLat, eventLon, eventDepth);
   }
+  return travelTime;
 }
 
 void TravelTimeTable::compute(double eventLat,
@@ -87,12 +99,12 @@ void TravelTimeTable::compute(double eventLat,
                               const Catalog::Station &station,
                               const std::string &phaseType,
                               double &travelTime,
-                              double &takeOffAngleAzim,
-                              double &takeOffAngleDip,
+                              double &azimuth,
+                              double &takeOffAngle,
                               double &velocityAtSrc)
 {
   // get travelTime
-  compute(eventLat, eventLon, eventDepth, station, phaseType, travelTime);
+  travelTime = compute(eventLat, eventLon, eventDepth, station, phaseType);
 
   // Get velocityAtSrc
   string velGId = "velGrid:" + Grid::filePath(_velGridPath, station, phaseType);
@@ -128,8 +140,8 @@ void TravelTimeTable::compute(double eventLat,
   }
 
   // Get takeOffAngles
-  takeOffAngleAzim = std::numeric_limits<double>::quiet_NaN();
-  takeOffAngleDip  = std::numeric_limits<double>::quiet_NaN();
+  azimuth      = std::numeric_limits<double>::quiet_NaN();
+  takeOffAngle = std::numeric_limits<double>::quiet_NaN();
 
   string angleGId =
       "angleGrid:" + Grid::filePath(_angleGridPath, station, phaseType);
@@ -137,7 +149,7 @@ void TravelTimeTable::compute(double eventLat,
   try
   {
     _angleGrids.get(angleGId)->getAngles(eventLat, eventLon, eventDepth,
-                                         takeOffAngleAzim, takeOffAngleDip);
+                                         azimuth, takeOffAngle);
   }
   catch (std::range_error &e)
   {
@@ -161,14 +173,14 @@ void TravelTimeTable::compute(double eventLat,
       throw Exception(e.what());
     }
     _angleGrids.get(angleGId)->getAngles(eventLat, eventLon, eventDepth,
-                                         takeOffAngleAzim, takeOffAngleDip);
+                                         azimuth, takeOffAngle);
   }
 
   // approximate angles if not already provided by the grid
-  computeApproximatedTakeOfAngles(
+  computeApproximatedTakeOffAngles(
       eventLat, eventLon, eventDepth, station, phaseType,
-      std::isfinite(takeOffAngleAzim) ? nullptr : &takeOffAngleAzim,
-      std::isfinite(takeOffAngleDip) ? nullptr : &takeOffAngleDip);
+      std::isfinite(azimuth) ? nullptr : &azimuth,
+      std::isfinite(takeOffAngle) ? nullptr : &takeOffAngle);
 }
 
 } // namespace NLL

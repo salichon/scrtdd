@@ -1,5 +1,32 @@
-#define SEISCOMP_TEST_MODULE hdd
-#include <seiscomp/unittest/unittests.h>
+/***************************************************************************
+ * MIT License                                                             *
+ *                                                                         *
+ * Copyright (C) by ETHZ/SED                                               *
+ *                                                                         *
+ * Permission is hereby granted, free of charge, to any person obtaining a *
+ * copy of this software and associated documentation files (the           *
+ * “Software”), to deal in the Software without restriction, including     *
+ * without limitation the rights to use, copy, modify, merge, publish,     *
+ * distribute, sublicense, and/or sell copies of the Software, and to      *
+ * permit persons to whom the Software is furnished to do so, subject to   *
+ * the following conditions:                                               *
+ *                                                                         *
+ * The above copyright notice and this permission notice shall be          *
+ * included in all copies or substantial portions of the Software.         *
+ *                                                                         *
+ * THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND,         *
+ * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF      *
+ * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  *
+ * IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY    *
+ * CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,    *
+ * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE       *
+ * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                  *
+ *                                                                         *
+ *   Developed by Luca Scarabello <luca.scarabello@sed.ethz.ch>            *
+ ***************************************************************************/
+
+#define BOOST_TEST_MODULE libhdd
+#include <boost/test/included/unit_test.hpp>
 #include <boost/test/data/monomorphic.hpp>
 #include <boost/test/data/test_case.hpp>
 
@@ -54,33 +81,33 @@ BOOST_DATA_TEST_CASE(test_ellipsoid, bdata::xrange(orgList.size()), orgIdx)
     // upper quadrants
     pointDepth = org.depth + 0.001;
 
-    computeCoordinates(distance, 45, org.latitude, org.longitude, pointLat,
-                       pointLon);
+    computeCoordinates(distance, degToRad(45), org.latitude, org.longitude, pointLat,
+                       pointLon, org.depth);
     BOOST_CHECK(ellip.isInside(pointLat, pointLon, pointDepth, 1));
-    computeCoordinates(distance, 315, org.latitude, org.longitude, pointLat,
-                       pointLon);
+    computeCoordinates(distance, degToRad(315), org.latitude, org.longitude, pointLat,
+                       pointLon, org.depth);
     BOOST_CHECK(ellip.isInside(pointLat, pointLon, pointDepth, 2));
-    computeCoordinates(distance, 225, org.latitude, org.longitude, pointLat,
-                       pointLon);
+    computeCoordinates(distance, degToRad(225), org.latitude, org.longitude, pointLat,
+                       pointLon, org.depth);
     BOOST_CHECK(ellip.isInside(pointLat, pointLon, pointDepth, 3));
-    computeCoordinates(distance, 135, org.latitude, org.longitude, pointLat,
-                       pointLon);
+    computeCoordinates(distance, degToRad(135), org.latitude, org.longitude, pointLat,
+                       pointLon, org.depth);
     BOOST_CHECK(ellip.isInside(pointLat, pointLon, pointDepth, 4));
 
     // bottom quadrants
     pointDepth = org.depth - 0.001;
 
-    computeCoordinates(distance, 45, org.latitude, org.longitude, pointLat,
+    computeCoordinates(distance, degToRad(45), org.latitude, org.longitude, pointLat,
                        pointLon);
     BOOST_CHECK(ellip.isInside(pointLat, pointLon, pointDepth, 5));
-    computeCoordinates(distance, 315, org.latitude, org.longitude, pointLat,
-                       pointLon);
+    computeCoordinates(distance, degToRad(315), org.latitude, org.longitude, pointLat,
+                       pointLon, org.depth);
     BOOST_CHECK(ellip.isInside(pointLat, pointLon, pointDepth, 6));
-    computeCoordinates(distance, 225, org.latitude, org.longitude, pointLat,
-                       pointLon);
+    computeCoordinates(distance, degToRad(225), org.latitude, org.longitude, pointLat,
+                       pointLon, org.depth);
     BOOST_CHECK(ellip.isInside(pointLat, pointLon, pointDepth, 7));
-    computeCoordinates(distance, 135, org.latitude, org.longitude, pointLat,
-                       pointLon);
+    computeCoordinates(distance, degToRad(135), org.latitude, org.longitude, pointLat,
+                       pointLon, org.depth);
     BOOST_CHECK(ellip.isInside(pointLat, pointLon, pointDepth, 8));
 
     pointDepth = org.depth;
@@ -88,33 +115,33 @@ BOOST_DATA_TEST_CASE(test_ellipsoid, bdata::xrange(orgList.size()), orgIdx)
     // inside the inner ellipsoid
     distance = distance / 2 - 0.01;
 
-    computeCoordinates(distance, 45, org.latitude, org.longitude, pointLat,
-                       pointLon);
+    computeCoordinates(distance, degToRad(45), org.latitude, org.longitude, pointLat,
+                       pointLon, org.depth);
     BOOST_CHECK(!ellip.isInside(pointLat, pointLon, pointDepth));
-    computeCoordinates(distance, 315, org.latitude, org.longitude, pointLat,
-                       pointLon);
+    computeCoordinates(distance, degToRad(315), org.latitude, org.longitude, pointLat,
+                       pointLon, org.depth);
     BOOST_CHECK(!ellip.isInside(pointLat, pointLon, pointDepth));
-    computeCoordinates(distance, 225, org.latitude, org.longitude, pointLat,
-                       pointLon);
+    computeCoordinates(distance, degToRad(225), org.latitude, org.longitude, pointLat,
+                       pointLon, org.depth);
     BOOST_CHECK(!ellip.isInside(pointLat, pointLon, pointDepth));
-    computeCoordinates(distance, 135, org.latitude, org.longitude, pointLat,
-                       pointLon);
+    computeCoordinates(distance, degToRad(135), org.latitude, org.longitude, pointLat,
+                       pointLon, org.depth);
     BOOST_CHECK(!ellip.isInside(pointLat, pointLon, pointDepth));
 
     // outside the outer ellipsoid
     distance = distance + 0.01;
 
-    computeCoordinates(distance, 45, org.latitude, org.longitude, pointLat,
-                       pointLon);
+    computeCoordinates(distance, degToRad(45), org.latitude, org.longitude, pointLat,
+                       pointLon, org.depth);
     BOOST_CHECK(!ellip.isInside(pointLat, pointLon, pointDepth));
-    computeCoordinates(distance, 315, org.latitude, org.longitude, pointLat,
-                       pointLon);
+    computeCoordinates(distance, degToRad(315), org.latitude, org.longitude, pointLat,
+                       pointLon, org.depth);
     BOOST_CHECK(!ellip.isInside(pointLat, pointLon, pointDepth));
-    computeCoordinates(distance, 225, org.latitude, org.longitude, pointLat,
-                       pointLon);
+    computeCoordinates(distance, degToRad(225), org.latitude, org.longitude, pointLat,
+                       pointLon, org.depth);
     BOOST_CHECK(!ellip.isInside(pointLat, pointLon, pointDepth));
-    computeCoordinates(distance, 135, org.latitude, org.longitude, pointLat,
-                       pointLon);
+    computeCoordinates(distance, degToRad(135), org.latitude, org.longitude, pointLat,
+                       pointLon, org.depth);
     BOOST_CHECK(!ellip.isInside(pointLat, pointLon, pointDepth));
   }
 }
